@@ -1,7 +1,6 @@
 package idletime
 
 import (
-	"fmt"
 	"syscall"
 	"time"
 	"unsafe"
