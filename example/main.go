@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
@@ -12,47 +11,24 @@ import (
 )
 
 func main() {
-
+	// Root context for the program
 	ctx := context.Background()
-	ctx, _ = signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+	defer cancel()
 
-	// Trigger `MyIdleAction` once the machine has been idle for 5 seconds
-	if err := idletime.RunWhileIdle(ctx, 5*time.Second, MyIdleHttpServer); err != nil {
+	// Trigger `idleProcess` once the machine has been idle for 5 seconds
+	if err := idletime.RunWhileIdle(ctx, 5*time.Second, idleProcess); err != nil {
 		log.Println(err.Error())
 	}
-
 }
 
-// MyIdleAction is a simulated long-running action
-func MyIdleAction(ctx context.Context) error {
-	// Simulate some long action
-	log.Println("Doing some work...")
-	select {
-	case <-ctx.Done():
-		log.Println("System is no longer idle, or the parent context was cancelled")
-		return ctx.Err()
-	case <-time.After(10 * time.Second):
+func idleProcess(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(time.Second):
+		}
+		log.Println("Machine is idle: ", time.Now())
 	}
-	return nil
-}
-
-// MyIdleHttpServer is an HTTP server that only runs when the machine is idle. Once the machine is
-// no longer idle, the server immediately shuts down.
-func MyIdleHttpServer(ctx context.Context) error {
-
-	log.Println("Starting HTTP server")
-	server := http.Server{
-		Addr: "127.0.0.1:4444",
-		Handler: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-			rw.Write([]byte("Hello world"))
-		}),
-	}
-
-	go func() {
-		<-ctx.Done()
-		server.Close()
-	}()
-
-	return server.ListenAndServe()
-
 }

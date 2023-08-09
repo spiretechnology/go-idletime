@@ -2,57 +2,41 @@ package idletime
 
 import (
 	"context"
-	"log"
 	"time"
 )
 
-// DefaultSampleInterval is the default amount of time between
-var DefaultSampleInterval = time.Second
+// SampleInterval is the default amount of time between
+var SampleInterval = 15 * time.Second
 
 // Action is a function that is executed with a context
-type Action func(context.Context) error
+type Action = func(context.Context) error
 
-// RunWhileIdle waits for the machine to become idle, then triggers the given action. If the machine becomes
-// active (no longer idle) while the action function is being executed, the action function's context
-// will automatically be cancelled.
+// RunWhileIdle runs the given action whenever the machine has been idle for the specified threshold amount of time.
+// When the machine becomes active again, the action will be cancelled. Once the machine becomes idle again, the
+// action will be triggered again.
 func RunWhileIdle(ctx context.Context, threshold time.Duration, action Action) error {
-
-	// Loop indefinitely until the context is cancelled
 	for {
-
+		// Wait for the machine to become idle
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(DefaultSampleInterval):
+		case <-UntilIdle(ctx, threshold):
 		}
 
-		// Get the idle time
-		idleTime, err := GetIdleTime()
-		if err != nil {
-			log.Println("idletime error: ", err.Error())
-			continue
+		// Run the action until the machine becomes active again
+		if err := runUntilActive(ctx, action); err != nil {
+			return err
 		}
-
-		// If the idle time exceeds the threshold, trigger the action
-		if idleTime >= threshold {
-			if err := runUntilActive(ctx, DefaultSampleInterval, action); err != nil {
-				log.Println("idletime action error: ", err.Error())
-			}
-		}
-
 	}
-
 }
 
 // runUntilActive runs the given action while the machine is idle. If the machine becomes active, the
 // context is cancelled.
-func runUntilActive(ctx context.Context, sampleInterval time.Duration, action func(context.Context) error) error {
-
+func runUntilActive(ctx context.Context, action Action) error {
 	// Create a cancellation context for the action
-	ctx, cancel := NotifyContextWhenActive(ctx, sampleInterval)
+	ctx, cancel := NotifyContextWhenActive(ctx)
 	defer cancel()
 
 	// Run the action in the context
 	return action(ctx)
-
 }
